@@ -140,8 +140,7 @@ training_args.report_to = 'wandb'
 training_args.evaluate_during_training = True
 
 # Choose GPU
-import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 
 roberta_base = RobertaForMaskedLM.from_pretrained('roberta-base')
 roberta_base_tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
