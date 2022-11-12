@@ -11,6 +11,7 @@ from transformers.modeling_longformer import LongformerSelfAttention
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+
 class RobertaLongSelfAttention(LongformerSelfAttention):
     def forward(
         self,
@@ -30,6 +31,7 @@ class RobertaLongForMaskedLM(RobertaForMaskedLM):
         for i, layer in enumerate(self.roberta.encoder.layer):
             # replace the `modeling_bert.BertSelfAttention` object with `LongformerSelfAttention`
             layer.attention.self = RobertaLongSelfAttention(config, layer_id=i)
+
 
 def create_long_model(save_model_to, attention_window, max_pos):
     model = RobertaForMaskedLM.from_pretrained('roberta-base')
@@ -73,12 +75,14 @@ def create_long_model(save_model_to, attention_window, max_pos):
     tokenizer.save_pretrained(save_model_to)
     return model, tokenizer
 
+
 def copy_proj_layers(model):
     for i, layer in enumerate(model.roberta.encoder.layer):
         layer.attention.self.query_global = copy.deepcopy(layer.attention.self.query)
         layer.attention.self.key_global = copy.deepcopy(layer.attention.self.key)
         layer.attention.self.value_global = copy.deepcopy(layer.attention.self.value)
     return model
+
 
 def pretrain_and_evaluate(args, model, tokenizer, eval_only, model_path):
     val_dataset = TextDataset(tokenizer=tokenizer,
@@ -108,69 +112,56 @@ def pretrain_and_evaluate(args, model, tokenizer, eval_only, model_path):
         eval_loss = eval_loss['eval_loss']
         logger.info(f'Eval bpc after pretraining: {eval_loss/math.log(2)}')
 
+
 @dataclass
 class ModelArgs:
     attention_window: int = field(default=512, metadata={"help": "Size of attention window"})
     max_pos: int = field(default=4096, metadata={"help": "Maximum position"})
-    report_to: str = 'wandb'
-
-parser = HfArgumentParser((TrainingArguments, ModelArgs,))
-
-
-training_args, model_args = parser.parse_args_into_dataclasses(look_for_args_file=False, args=[
-    '--output_dir', '/ckpts',
-    '--warmup_steps', '500',
-    '--learning_rate', '0.00003',
-    '--weight_decay', '0.01',
-    '--adam_epsilon', '1e-6',
-    '--max_steps', '3000',
-    '--logging_steps', '10',
-    '--save_steps', '500',
-    '--max_grad_norm', '5.0',
-    '--per_gpu_eval_batch_size', '2',
-    '--per_gpu_train_batch_size', '1',  # 32GB gpu with fp32
-    '--gradient_accumulation_steps', '16',
-    '--evaluate_during_training',
-    '--do_train',
-    '--do_eval',
-])
-training_args.val_datapath = '/wikidata/wikitext-103-raw/wiki.valid.raw'
-training_args.train_datapath = '/wikidata/wikitext-103-raw/wiki.train.raw'
-training_args.report_to = 'wandb'
-training_args.evaluate_during_training = True
-
-# Choose GPU
-# os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
-
-roberta_base = RobertaForMaskedLM.from_pretrained('roberta-base')
-roberta_base_tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
-logger.info('Evaluating roberta-base (seqlen: 512) for refernece ...')
-pretrain_and_evaluate(training_args, roberta_base, roberta_base_tokenizer, eval_only=True, model_path=None)
-
-model_path = f'{training_args.output_dir}/roberta-base-{model_args.max_pos}'
-if not os.path.exists(model_path):
-    os.makedirs(model_path)
-
-logger.info(f'Converting roberta-base into roberta-base-{model_args.max_pos}')
-model, tokenizer = create_long_model(
-    save_model_to=model_path, attention_window=model_args.attention_window, max_pos=model_args.max_pos)
-
-logger.info(f'Loading the model from {model_path}')
-tokenizer = RobertaTokenizerFast.from_pretrained(model_path)
-model = RobertaLongForMaskedLM.from_pretrained(model_path)
-
-logger.info(f'Pretraining roberta-base-{model_args.max_pos} ... ')
-
-training_args.max_steps = 30   ## <<<<<<<<<<<<<<<<<<<<<<<< REMOVE THIS <<<<<<<<<<<<<<<<<<<<<<<<
-
-pretrain_and_evaluate(training_args, model, tokenizer, eval_only=False, model_path=training_args.output_dir)
+    train_datapath: str = None
+    val_datapath: str = None
 
 
-logger.info(f'Copying local projection layers into global projection layers ... ')
-model = copy_proj_layers(model)
-logger.info(f'Saving model to {model_path}')
-model.save_pretrained(model_path)
+def main():
 
-logger.info(f'Loading the model from {model_path}')
-tokenizer = RobertaTokenizerFast.from_pretrained(model_path)
-model = RobertaLongForMaskedLM.from_pretrained(model_path)
+    parser = HfArgumentParser((TrainingArguments, ModelArgs,))
+
+    training_args, model_args = parser.parse_args_into_dataclasses(look_for_args_file=False)
+    training_args.report_to = 'wandb'
+    training_args.evaluate_during_training = True
+    training_args.train_datapath = model_args.train_datapath
+    training_args.val_datapath = model_args.val_datapath
+
+    # Choose GPU
+    # os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
+
+    roberta_base = RobertaForMaskedLM.from_pretrained('roberta-base')
+    roberta_base_tokenizer = RobertaTokenizerFast.from_pretrained('roberta-base')
+    logger.info('Evaluating roberta-base (seqlen: 512) for refernece ...')
+    pretrain_and_evaluate(training_args, roberta_base, roberta_base_tokenizer, eval_only=True, model_path=None)
+
+    model_path = f'{training_args.output_dir}/roberta-base-{model_args.max_pos}'
+    if not os.path.exists(model_path):
+        os.makedirs(model_path)
+        logger.info(f'Converting roberta-base into roberta-base-{model_args.max_pos}')
+        model, tokenizer = create_long_model(
+            save_model_to=model_path, attention_window=model_args.attention_window, max_pos=model_args.max_pos)
+
+    logger.info(f'Loading the model from {model_path}')
+    tokenizer = RobertaTokenizerFast.from_pretrained(model_path)
+    model = RobertaLongForMaskedLM.from_pretrained(model_path)
+
+    logger.info(f'Pretraining roberta-base-{model_args.max_pos} ... ')
+
+    pretrain_and_evaluate(training_args, model, tokenizer, eval_only=False, model_path=training_args.output_dir)
+
+    logger.info(f'Copying local projection layers into global projection layers ... ')
+    model = copy_proj_layers(model)
+    logger.info(f'Saving model to {model_path}')
+    model.save_pretrained(model_path)
+
+    logger.info(f'Loading the model from {model_path}')
+    tokenizer = RobertaTokenizerFast.from_pretrained(model_path)
+    model = RobertaLongForMaskedLM.from_pretrained(model_path)
+
+if __name__ == "__main__":
+    main()
