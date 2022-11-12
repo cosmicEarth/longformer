@@ -116,7 +116,7 @@ def pretrain_and_evaluate(args, model, tokenizer, eval_only, model_path):
 @dataclass
 class ModelArgs:
     attention_window: int = field(default=512, metadata={"help": "Size of attention window"})
-    max_pos: int = field(default=3072, metadata={"help": "Maximum position"})
+    max_pos: int = field(default=2048, metadata={"help": "Maximum position"})
     train_datapath: str = None
     val_datapath: str = None
 
