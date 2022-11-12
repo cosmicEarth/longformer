@@ -7,10 +7,14 @@ from dataclasses import dataclass, field
 from transformers import RobertaForMaskedLM, RobertaTokenizerFast, TextDataset, DataCollatorForLanguageModeling, Trainer
 from transformers import TrainingArguments, HfArgumentParser
 from transformers.modeling_longformer import LongformerSelfAttention
+import transformers
+
+import re
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+transformers.logging.set_verbosity_info()
 
 class RobertaLongSelfAttention(LongformerSelfAttention):
     def forward(
@@ -84,6 +88,19 @@ def copy_proj_layers(model):
     return model
 
 
+def get_last_checkpoint(folder):
+    PREFIX_CHECKPOINT_DIR = "checkpoint"
+    _re_checkpoint = re.compile(r"^" + PREFIX_CHECKPOINT_DIR + r"\-(\d+)$")
+    content = os.listdir(folder)
+    checkpoints = [
+        path
+        for path in content
+        if _re_checkpoint.search(path) is not None and os.path.isdir(os.path.join(folder, path))
+    ]
+    if len(checkpoints) == 0:
+        return
+    return os.path.join(folder, max(checkpoints, key=lambda x: int(_re_checkpoint.search(x).groups()[0])))
+
 def pretrain_and_evaluate(args, model, tokenizer, eval_only, model_path):
     val_dataset = TextDataset(tokenizer=tokenizer,
                               file_path=args.val_datapath,
@@ -96,16 +113,20 @@ def pretrain_and_evaluate(args, model, tokenizer, eval_only, model_path):
                                     file_path=args.train_datapath,
                                     block_size=tokenizer.max_len)
 
+    last_checkpoint = get_last_checkpoint(args.output_dir)
+    logger.info(f'last checkpoint: {last_checkpoint}')
+
+    model = RobertaLongForMaskedLM.from_pretrained(last_checkpoint)
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=True, mlm_probability=0.15)
     trainer = Trainer(model=model, args=args, data_collator=data_collator,
-                      train_dataset=train_dataset, eval_dataset=val_dataset, prediction_loss_only=True,)
+                      train_dataset=train_dataset, eval_dataset=val_dataset, prediction_loss_only=True)
 
     eval_loss = trainer.evaluate()
     eval_loss = eval_loss['eval_loss']
     logger.info(f'Initial eval bpc: {eval_loss/math.log(2)}')
     
     if not eval_only:
-        trainer.train(model_path=model_path)
+        trainer.train(model_path=last_checkpoint)
         trainer.save_model()
 
         eval_loss = trainer.evaluate()
