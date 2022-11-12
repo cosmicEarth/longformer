@@ -118,7 +118,7 @@ parser = HfArgumentParser((TrainingArguments, ModelArgs,))
 
 
 training_args, model_args = parser.parse_args_into_dataclasses(look_for_args_file=False, args=[
-    '--output_dir', '/tmp',
+    '--output_dir', '/ckpts',
     '--warmup_steps', '500',
     '--learning_rate', '0.00003',
     '--weight_decay', '0.01',
@@ -134,8 +134,8 @@ training_args, model_args = parser.parse_args_into_dataclasses(look_for_args_fil
     '--do_train',
     '--do_eval',
 ])
-training_args.val_datapath = 'wikitext-103-raw/wiki.valid.raw'
-training_args.train_datapath = 'wikitext-103-raw/wiki.train.raw'
+training_args.val_datapath = '/wikidata/wikitext-103-raw/wiki.valid.raw'
+training_args.train_datapath = '/wikidata/wikitext-103-raw/wiki.train.raw'
 training_args.report_to = 'wandb'
 training_args.evaluate_during_training = True
 
