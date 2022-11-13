@@ -133,7 +133,7 @@ def pretrain_and_evaluate(args, model, tokenizer, eval_only, model_path, init_we
 
     if init_weights:
         logger.info('initializing weights')
-        model = model.init_weights()
+        model.init_weights()
 
     data_collator = DataCollatorForLanguageModeling(
         tokenizer=tokenizer, mlm=True, mlm_probability=0.15)
