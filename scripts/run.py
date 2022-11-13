@@ -10,6 +10,7 @@ from transformers.modeling_longformer import LongformerSelfAttention
 import transformers
 
 import re
+import wandb
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -165,6 +166,7 @@ class ModelArgs:
     val_datapath: str = None
     from_scratch: bool = False
     use_roberta: bool = False
+    wandb_name: str = 'tmp'
 
 
 def main():
@@ -178,6 +180,8 @@ def main():
     training_args.train_datapath = model_args.train_datapath
     training_args.val_datapath = model_args.val_datapath
 
+    wandb.login()
+    wandb.init(id=model_args.wandb_name)
     # Choose GPU
     # os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 
