@@ -113,7 +113,7 @@ def get_last_checkpoint(folder):
     return os.path.join(folder, max(checkpoints, key=lambda x: int(_re_checkpoint.search(x).groups()[0])))
 
 
-def pretrain_and_evaluate(args, model, tokenizer, eval_only, model_path, init_weights=False):
+def pretrain_and_evaluate(args, model, tokenizer, eval_only, model_path, init_weights=False, use_roberta=False):
     val_dataset = TextDataset(tokenizer=tokenizer,
                               file_path=args.val_datapath,
                               block_size=tokenizer.max_len)
@@ -129,7 +129,10 @@ def pretrain_and_evaluate(args, model, tokenizer, eval_only, model_path, init_we
     last_checkpoint = get_last_checkpoint(args.output_dir)
     if last_checkpoint is not None:
         logger.info(f'loading last checkpoint: {last_checkpoint}')
-        model = RobertaLongForMaskedLM.from_pretrained(last_checkpoint)
+        if use_roberta:
+            model = RobertaForMaskedLM.from_pretrained(last_checkpoint)
+        else:
+            model = RobertaLongForMaskedLM.from_pretrained(last_checkpoint)
 
     if init_weights:
         logger.info('initializing weights')
@@ -203,7 +206,7 @@ def main():
         model = RobertaLongForMaskedLM.from_pretrained(model_path)
 
     pretrain_and_evaluate(training_args, model, tokenizer, eval_only=False,
-                          model_path=training_args.output_dir, init_weights=model_args.from_scratch)
+                          model_path=training_args.output_dir, init_weights=model_args.from_scratch, use_roberta=model_args.use_roberta)
 
     logger.info(
         f'Copying local projection layers into global projection layers ... ')
